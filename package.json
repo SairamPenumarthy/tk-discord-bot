@@ -1,0 +1,17 @@
+{
+  "name": "discord-bot",
+  "version": "1.0.0",
+  "description": "Funny first bot for Buffalo Wild Wings",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "sunny",
+  "license": "ISC",
+  "dependencies": {
+    "discord.js": "^13.5.0"
+  },
+  "devDependencies": {
+    "eslint": "^8.6.0"
+  }
+}
