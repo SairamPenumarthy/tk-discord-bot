@@ -1,7 +1,13 @@
 const { Client, Intents } = require("discord.js");
+var Scraper = require('images-scraper');
 // The Client and Intents are destructured from discord.js, since it exports an object by default. Read up on destructuring here https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Destructuring_assignment
 const client = new Client({
   intents: [Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MESSAGES]
+});
+const google = new Scraper({
+    puppeteer: {
+      headless: false,
+    },
 });
 const config = require("./config.json");
 
@@ -33,6 +39,13 @@ client.on("messageCreate", (message) => {
     // !talk => sends random tk quote
     if (message.content.startsWith("!talk")) {
         message.channel.send(getRandomQuote());
+    }
+
+    if (message.content.startsWith("!grill")) {
+        (async () => {
+            const results = await google.scrape('grilling memes', 100);
+            message.channel.send(results[Math.floor(Math.random() * 100)].url);
+        })();
     }
 });
 
@@ -90,6 +103,7 @@ function getRandomQuote() {
         "Where is that taste?",
         "Where is it!?",
         "Hunger!",
+        "*Tahm snarls*",
         "Give it to me!",
         "I demand an entrée!",
         "You are a malodorous offense to my palate!",
