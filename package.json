@@ -9,8 +9,13 @@
   "author": "sunny",
   "license": "ISC",
   "dependencies": {
+    "@discordjs/voice": "^0.7.5",
     "discord.js": "^13.5.0",
-    "images-scraper": "^6.4.0"
+    "images-scraper": "^6.4.0",
+    "libsodium-wrappers": "^0.7.9",
+    "play-dl": "^1.7.5",
+    "yt-search": "^2.10.3",
+    "ytdl-core": "^4.9.2"
   },
   "devDependencies": {
     "eslint": "^8.6.0"

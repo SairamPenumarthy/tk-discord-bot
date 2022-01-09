@@ -1,8 +1,19 @@
 const { Client, Intents } = require("discord.js");
 var Scraper = require('images-scraper');
+const { joinVoiceChannel } = require('@discordjs/voice');
+const voice = require('@discordjs/voice');
+const ytdl = require('ytdl-core');
+const ytSearch = require('yt-search');
+const play = require('play-dl');
+const { createAudioPlayer } = require('@discordjs/voice');
+const { createAudioResource, StreamType } = require('@discordjs/voice');
+const { AudioPlayerStatus } = require('@discordjs/voice');
+
+
+
 // The Client and Intents are destructured from discord.js, since it exports an object by default. Read up on destructuring here https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Destructuring_assignment
 const client = new Client({
-  intents: [Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MESSAGES]
+  intents: [Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MESSAGES, Intents.FLAGS.GUILD_VOICE_STATES]
 });
 const google = new Scraper({
     puppeteer: {
@@ -15,53 +26,152 @@ client.on("ready", () => {
   console.log("Tahmas is ready!");
 });
 
+const queue = new Map();
+const player = createAudioPlayer();
+
 // detects messages
 client.on("messageCreate", (message) => {
     if (message.author.bot) return;
 
     //  !help => lists out possible commands/formats
-    if (message.content.startsWith("!help")) {
-        message.channel.send("!hi:\tTahm Kench acknowledges your existence\n!rate [user mention]:\tTahm Kench rates the user(s)\n!talk:\tTahm Kench says something with profundity");
+    if (message.content.startsWith("-help")) {
+        message.channel.send("-hi:\tTahm Kench acknowledges your existence\n-rate [user mention]:\tTahm Kench rates the user(s)\n-talk:\tTahm Kench says something with profundity\n-grill:\tTahm Kench sends you a lovely grilling meme");
     }
 
     //  !hi => requests formal greetings from Tahm Kench
-    if (message.content.startsWith("!hi")) {
+    if (message.content.startsWith("-hi")) {
         message.channel.send("Hello <@!" + message.author.id + ">");
     }
 
     //  !rate => rate mentioned users
-    if (message.content.startsWith('!rate')) {
+    if (message.content.startsWith('-rate')) {
         message.mentions.users.forEach((k, v) => {
             message.channel.send("<@!" + v + "> is " + (Math.floor(Math.random() * 101)) + "% cool.");
         })
     }
 
     // !talk => sends random tk quote
-    if (message.content.startsWith("!talk")) {
+    if (message.content.startsWith("-talk")) {
         message.channel.send(getRandomQuote());
     }
 
-    if (message.content.startsWith("!grill")) {
+    if (message.content.startsWith("-grill")) {
         (async () => {
-            const results = await google.scrape('grilling memes', 100);
-            message.channel.send(results[Math.floor(Math.random() * 100)].url);
+            const results = await google.scrape('grilling memes', 300);
+            message.channel.send(results[Math.floor(Math.random() * 300)].url);
         })();
+    }
+
+    if (message.content.startsWith("-play ")) {
+        if (message.content.length > 6) {
+            if (message.channel.type !== 'GUILD_TEXT') return;
+            (async () => {
+                const voice_channel = message.member.voice.channel;
+                if (!voice_channel) {
+                    return message.reply('Please join a voice channel first!');
+                }
+                const permissions = voice_channel.permissionsFor(message.client.user);
+                if (!permissions.has('CONNECT')) return message.channel.reply("Tahm Kench isn't allowed in vc :(");
+                if (!permissions.has('SPEAK')) return message.channel.reply("Tahm Kench is being oppressed from speaking :(");
+                const server_queue = queue.get(message.guild.id);
+                let song = {};
+                let args = message.content.substring(6);
+                if (ytdl.validateURL(args)) {
+                    const song_info = await ytdl.getInfo(args);
+                    song = { title: song_info.videoDetails.title, url: song_info.videoDetails.url };
+                } else {
+                    const video_finder = async (query) =>{
+                        const videoResult = await ytSearch(query);
+                        return (videoResult.videos.length > 1) ? videoResult.videos[0] : null;
+                    }
+                    const video = await video_finder(args);
+                    if (video) {
+                        song = { title: video.title, url: video.url }
+                    } else {
+                        message.channel.reply('Error finding video');
+                    }
+                }
+
+                if (!server_queue) {
+                    const queue_constructor = {
+                        voice_channel: voice_channel,
+                        text_channel: message.channel,
+                        connection: null,
+                        songs: []
+                    }
+                    queue.set(message.guild.id, queue_constructor);
+                    queue_constructor.songs.push(song);
+        
+                    try {
+                        const connection = joinVoiceChannel({
+                            channelId: message.member.voice.channel.id,
+                            guildId: message.member.voice.channel.guild.id,
+                            adapterCreator: message.member.voice.channel.guild.voiceAdapterCreator,
+                        });
+                        connection.subscribe(player);
+                        queue_constructor.connection = connection;
+                        video_player(message, message.guild, queue_constructor.songs[0]);
+                    } catch (err) {
+                        queue.delete(message.guild.id);
+                        message.reply("Couldn't connect");
+                        throw err;
+                    }
+                } else {
+                    server_queue.songs.push(song);
+                    return message.channel.send(`**${song.title}** added to queue`);
+                }
+            })();
+        } else {
+            message.reply("Need song name");
+        }
+    }
+
+    if (message.content.startsWith("-pause")) {
+        player.pause();
+    }
+
+    if (message.content.startsWith("-resume")) {
+        player.unpause();
+    }
+
+    if (message.content.startsWith("-stop")) {
+        player.stop();
+        server_queue = {};
+    }
+
+    if (message.content.startsWith("-join")) {
+        joinVoiceChannel({
+            channelId: message.member.voice.channel.id,
+            guildId: message.member.voice.channel.guild.id,
+            adapterCreator: message.member.voice.channel.guild.voiceAdapterCreator,
+        });
+    }
+
+    if (message.content.startsWith("-leave")) {
+        voice.getVoiceConnection(message.guild.id + "").disconnect();
     }
 });
 
-/*function getUserFromMention(mention) {
-	if (!mention) return;
+const video_player = async (message, guild, song) => {
+    const song_queue = queue.get(guild.id);
 
-	if (mention.startsWith('<@') && mention.endsWith('>')) {
-		mention = mention.slice(2, -1);
+    if (!song) {
+        voice.getVoiceConnection(message.guild.id + "").disconnect();
+        queue.delete(guild.id);
+        return;
+    }
 
-		if (mention.startsWith('!')) {
-			mention = mention.slice(1);
-		}
-
-		return client.users.cache.get(mention);
-	}
-}*/
+    const stream = await play.stream(song.url);
+    let resource = createAudioResource(stream.stream, {
+        inputType: stream.type
+    })
+    player.play(resource);
+    player.on(AudioPlayerStatus.Idle, () => {
+        song_queue.songs.shift();
+        video_player(message, guild, song_queue.songs[0]);
+    });
+    await message.channel.send(`Now Playing **${song.title}**`);
+}
 
 function getRandomQuote() {
     const quotes = [
